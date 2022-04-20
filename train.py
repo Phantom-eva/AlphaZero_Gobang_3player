@@ -11,6 +11,10 @@ import numpy as np
 from collections import defaultdict, deque
 from game import Board, Game
 import time
+import multiprocessing as mp
+from multiprocessing import Pool
+# from multiprocessing import Queue
+
 # from mcts_pure import MCTSPlayer as MCTS_Pure
 # from mcts_alphaZero import MCTSPlayer
 from MCTS import MCTSPlayer as MCTS_Pure
@@ -43,7 +47,7 @@ class TrainPipeline():
         self.buffer_size = 10000
         self.batch_size = 512  # mini-batch size for training
         self.data_buffer = deque(maxlen=self.buffer_size)
-        self.play_batch_size = 1
+        self.play_batch_size = 2
         self.epochs = 5  # num of train_steps for each update
         self.kl_targ = opt.kl_target
         self.check_freq = opt.check_freq  # default 50
@@ -57,6 +61,7 @@ class TrainPipeline():
         self.atten = opt.atten
         self.use_gpu = opt.use_gpu
         atten_cad_blk_num=opt.atten_cad_blk_num
+        self.multiprocessing = opt.multiprocessing
         if init_model:
             # start training from an initial policy-value net
             self.policy_value_net = PolicyValueNet(self.board_width,
@@ -119,6 +124,20 @@ class TrainPipeline():
             play_data = self.get_equi_data(play_data)
             self.data_buffer.extend(play_data)
 
+    def multi_collect_selfplay_data(self, que.m_games=1):
+        """collect self-play data for training"""
+        print("start sub task")
+        for i in range(n_games):
+            winner, play_data = self.game.start_self_play(self.mcts_player,
+                                                          temp=self.temp)
+            play_data = list(play_data)[:]
+            episode_len = len(play_data)
+            # augment the data
+            play_data = self.get_equi_data(play_data)
+            # self.data_buffer.extend(play_data)
+            que.put([episode_len,play_data])
+        print("end sub task")
+        
     def policy_update(self):
         """update the policy-value net"""
         mini_batch = random.sample(self.data_buffer, self.batch_size)
@@ -368,6 +387,12 @@ if __name__ == '__main__':
                         type=int,
                         default=4,
                         help='attention cascad block num, init 4')
+    parser.add_argument('--multiprocessing',
+                        '-mp',
+                        nargs='?',
+                        const=True,
+                        default=False,
+                        help='using 2 multiprocessing, init False')
 
     opt = parser.parse_args()
     model_file = None
