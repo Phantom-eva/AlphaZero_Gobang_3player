@@ -13,6 +13,7 @@ from game import Board, Game
 import time
 import multiprocessing as mp
 from multiprocessing import Pool
+from multiprocessing import Process
 # from multiprocessing import Queue
 
 # from mcts_pure import MCTSPlayer as MCTS_Pure
@@ -127,7 +128,7 @@ class TrainPipeline():
     def multi_collect_selfplay_data(self, que.m_games=1):
         """collect self-play data for training"""
         print("start sub task")
-        for i in range(n_games):
+        for i in range(que.m_games):
             winner, play_data = self.game.start_self_play(self.mcts_player,
                                                           temp=self.temp)
             play_data = list(play_data)[:]
@@ -234,7 +235,30 @@ class TrainPipeline():
                 print("resume from batch: ", init_batch)
             for i in range(init_batch, self.game_batch_num):
                 start_epoch = time.time()
-                self.collect_selfplay_data(self.play_batch_size)
+                if self.multiprocessing:
+                    # p = Pool(2)
+                    # manager = mp.Manager()
+                    # que = manager.Queue()
+                    # self.episode_len=0
+                    # print("start multi task")
+                    # for n in range(2):
+                    #     p.apply_async(self.multip_collect_selfplay_data, args=(que, self.play_batch_size//2,))
+                    # p.close()
+                    # p.join()
+                    # for n in range(2):
+                    #     episode_len, play_data= que.get()
+                    #     # augment the data
+                    #     self.episode_len+=episode_len
+                    #     self.data_buffer.extend(play_data)
+                    p1 = Process(target=multi_collect_selfplay_data, args=(que, self.play_batch_size//2,))
+                    p2 = Process(target=multi_collect_selfplay_data, args=(que, self.play_batch_size//2,))
+                    p1.start()
+                    p2.start()
+                    p1.join()
+                    p2.join()
+                else:
+                    self.collect_selfplay_data(self.play_batch_size)
+                print("len of deque",len(self.data_buffer))
                 print("batch i:{}, episode_len:{}".format(
                     i + 1, self.episode_len))
                 if len(self.data_buffer) > self.batch_size:
